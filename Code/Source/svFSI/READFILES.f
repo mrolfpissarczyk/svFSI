@@ -2509,6 +2509,14 @@ c     2         "can be applied for Neumann boundaries only"
          lPtr => lSt%get(lDmn%stM%bfs, "bfs")
          lPtr => lSt%get(lDmn%stM%khs, "k")
 
+      CASE ("DFDM-d")
+      ! Discrete fiber dispersion method !
+         lDmn%stM%isoType = stIso_DFDM_d
+         lPtr => lSt%get(lDmn%stM%C10, "C10")
+!         lDmn%stM%C10 = mu*0.5_RKIND
+         lPtr => lSt%get(lDmn%stM%aff, "k1")
+         lPtr => lSt%get(lDmn%stM%bff, "k2")
+
       CASE DEFAULT
          err = "Undefined constitutive model used"
       END SELECT

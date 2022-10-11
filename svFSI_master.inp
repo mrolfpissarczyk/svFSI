@@ -1483,6 +1483,21 @@ Add equation: mesh
 #    |                      | For this model to be used, two families|
 #    |                      | of fibers must be loaded in "Add mesh" |
 #    |----------------------|----------------------------------------|
+#    |                      | Discrete fiber dispersion method to    |
+#    |                      | model non-symmetric fiber dispersion   |
+#    |                      | in arteries; the modified form         |
+#    |                      | where the anisotropic terms in the     |
+#    |                      | strain energy involve full invariants. |
+#    |                      |    Constitutive model: DFDM-d {        |
+#    |  "DFDM-d"            |       mu:                              |
+#    |                      |       k2:                              |
+#    |                      |       k2:                              |
+#    |                      |       exc:                             |
+#    |                      |    }                                   |
+#    |                      | For this model to be used, two         |
+#    |                      | discrete fiber density files must be   |
+#    |                      | loaded in "???"                        |
+#    |----------------------|----------------------------------------|
 #
 #  o Fiber reinforcement stress: This setting applies additional fiber
 #    reinforcement stress and can be prescribed as either a "Steady"

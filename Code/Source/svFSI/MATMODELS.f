@@ -58,6 +58,11 @@
 !     HGO/HO model
       REAL(KIND=RKIND) :: Eff, Ess, Efs, fsn, kap, c4f, c4s, dc4f, dc4s,
      2   Hff(nsd,nsd), Hss(nsd,nsd), Hfs(nsd,nsd)
+!     DFDM model
+      INTEGER(KIND=IKIND) :: lm, i, k, nrf
+      REAL(KIND=RKIND) :: J1d, psifp4, psifp6, psif2p4, psif2p6,
+     2   expterm4, expterm6, fne4(nsd), fne6(nsd), Inv4b, Inv6b,
+     2   m1tm14(nsd,nsd), m1tm16(nsd,nsd), rfod4(1,4), rfod6(1,4)
 !     Active strain for electromechanics
       REAL(KIND=RKIND) :: Fe(nsd,nsd), Fa(nsd,nsd), Fai(nsd,nsd)
 
@@ -537,6 +542,100 @@ c     2      (EXP(stM%khs*Ess) + EXP(-stM%khs*Ess) + 2.0_RKIND)
             CC  = TEN_DDOT_2412(CCb, CC, nsd)
          END IF
 
+!     DFDM
+      CASE (stIso_DFDM_d)
+        IF (nfd .NE. 2) err = "Min fiber directions not defined for "//
+     2     "DFDM (2)"
+
+        J1d = J**(-1._RKIND/nd)
+
+        g1 = stM%C10
+        Sb = 2._RKIND*(g1*IDm)
+
+        g2 = stM%aff
+        g3 = stM%bff
+
+        IF (g2 .GT. 0._RKIND) THEN
+
+        rfod4(1,1:3) = (/ 0._RKIND,0._RKIND,0._RKIND /)
+        rfod6(1,1:3) = (/ 0._RKIND,0._RKIND,0._RKIND /)
+        rfod4(1,4)   = 0._RKIND
+        rfod6(1,4)   = 0._RKIND
+
+        fne4(:) = 0._RKIND
+        fne6(:) = 0._RKIND
+
+        nrf = 1
+
+!       loop over all discrete fiber directions
+        do lm = 1, nrf
+
+!         $F * N$
+          do i = 1,3
+            fne4(:) = fne4(:) + Fe(:,i)*rfod4(lm, i)
+            fne6(:) = fne6(:) + Fe(:,i)*rfod6(lm, i)
+          end do
+
+          Inv4 = fne4(1)**2._RKIND + fne4(2)**2._RKIND +
+     1           fne4(3)**2._RKIND
+          Inv6 = fne6(1)**2._RKIND + fne6(2)**2._RKIND +
+     1           fne6(3)**2._RKIND
+
+          fne4 = fne4 * J1d
+          fne6 = fne6 * J1d
+
+          m1tm14 = MAT_DYADPROD(fne4, fne4, nsd)
+          m1tm16 = MAT_DYADPROD(fne6, fne6, nsd)
+
+          Inv4b =  Inv4 * J2d
+          Inv6b =  Inv6 * J2d
+
+          expterm4 = exp(g3 * (Inv4b-1._RKIND)**2._RKIND)
+          psifp4   = g2*(Inv4b - 1._RKIND) * expterm4
+          psif2p4  = g2*(1._RKIND +
+     1               2._RKIND*g3*((Inv4b-2._RKIND)**2._RKIND))*expterm4
+
+          expterm6 = exp(g3 * (Inv6b-1._RKIND)**2._RKIND)
+          psifp6   = g2*(Inv6b - 1._RKIND) * expterm6
+          psif2p6  = g2*(1._RKIND +
+     1               2._RKIND*g3*((Inv6b-2._RKIND)**2._RKIND))*expterm6
+
+!         calculate 2PK stress tensor
+
+          Sb = Sb + 2._RKIND*rfod4(lm,4)*psifp4*m1tm14
+     1         + 2._RKIND*rfod6(lm,4)*psifp6*m1tm16
+
+!         calculate fictitious elasticity tensor
+          CCb = CCb + (4._RKIND*psif2p4)*rfod4(lm,4)
+     1          * TEN_DYADPROD(m1tm14,m1tm14,nsd)
+     1          + (4._RKIND*psif2p6)*rfod6(lm,4)
+     1          * TEN_DYADPROD(m1tm16,m1tm16,nsd)
+
+        END DO
+
+        CCb = CCb * J4d
+
+        PP  = TEN_IDs(nsd) - (1._RKIND/nd) * TEN_DYADPROD(Ci, C, nsd)
+        CC  = TEN_DDOT(CCb, PP, nsd)
+        CC  = TEN_TRANSPOSE(CC, nsd)
+        CC  = TEN_DDOT(PP, CC, nsd)
+
+        ELSE
+
+        CC = 0._RKIND
+
+        END IF
+
+        r1 = J2d*MAT_DDOT(C, Sb, nsd) / nd
+        S  = J2d*Sb - r1*Ci
+
+        CC  = CC - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, S, nsd)
+     2        + TEN_DYADPROD(S, Ci, nsd) )
+
+        S   = S + p*J*Ci
+        CC  = CC + 2._RKIND*(r1 - p*J) * TEN_SYMMPROD(Ci, Ci, nsd)
+     2         + (pl*J - 2._RKIND*r1/nd) * TEN_DYADPROD(Ci, Ci, nsd)
+
       CASE DEFAULT
          err = "Undefined material constitutive model"
       END SELECT
@@ -596,6 +695,11 @@ c     2      (EXP(stM%khs*Ess) + EXP(-stM%khs*Ess) + 2.0_RKIND)
       ! HGO, HO !
       REAL(KIND=RKIND) :: Eff, Ess, Efs, fsn, kap, c4f, c4s, dc4f, dc4s,
      2   Hff(nsd,nsd), Hss(nsd,nsd), Hfs(nsd,nsd)
+!     DFDM model
+      INTEGER(KIND=IKIND) :: lm, i, k, nrf
+      REAL(KIND=RKIND) :: J1d, psifp4, psifp6, psif2p4, psif2p6,
+     2   expterm4, expterm6, fne4(nsd), fne6(nsd), Inv4b, Inv6b,
+     2   m1tm14(nsd,nsd), m1tm16(nsd,nsd), rfod4(1,4), rfod6(1,4)
 !     Active strain for electromechanics
       REAL(KIND=RKIND) :: Fe(nsd,nsd), Fa(nsd,nsd), Fai(nsd,nsd)
 
@@ -1027,6 +1131,99 @@ c     2      (EXP(stM%khs*Ess) + EXP(-stM%khs*Ess) + 2.0_RKIND)
             CC  = TEN_DDOT_3424(CC, CCb, nsd)
             CC  = TEN_DDOT_2412(CCb, CC, nsd)
          END IF
+
+!     Discrete fiber dispersion method (DFDM) to model arteries with isochoric
+!     invariants for the anisotropic term (decoupled)
+      CASE (stIso_DFDM_d)
+        IF (nfd . NE. 2) err = "Min fiber directions not defined for "//
+     2     "DFDM (2)"
+
+        J1d = J**(-1._RKIND/nd)
+
+        g1 = stM%C10
+        Sb = 2._RKIND*(g1*IDm)
+
+        g2 = stM%aff
+        g3 = stM%bff
+
+        IF (g2 .GT. 0._RKIND) THEN
+
+        rfod4(1,1:3) = (/ 0._RKIND,0._RKIND,0._RKIND /)
+        rfod6(1,1:3) = (/ 0._RKIND,0._RKIND,0._RKIND /)
+        rfod4(1,4)   = 0._RKIND
+        rfod6(1,4)   = 0._RKIND
+
+        fne4(:) = 0._RKIND
+        fne6(:) = 0._RKIND
+
+        nrf = 1
+
+!       loop over all discrete fiber directions
+        do lm = 1, nrf
+
+!         $F * N$
+          do i = 1,3
+            fne4(:) = fne4(:) + Fe(:,i)*rfod4(lm, i)
+            fne6(:) = fne6(:) + Fe(:,i)*rfod6(lm, i)
+          end do
+
+          Inv4 = fne4(1)**2._RKIND + fne4(2)**2._RKIND +
+     1           fne4(3)**2._RKIND
+          Inv6 = fne6(1)**2._RKIND + fne6(2)**2._RKIND +
+     1           fne6(3)**2._RKIND
+
+          fne4 = fne4 * J1d
+          fne6 = fne6 * J1d
+
+          m1tm14 = MAT_DYADPROD(fne4, fne4, nsd)
+          m1tm16 = MAT_DYADPROD(fne6, fne6, nsd)
+
+          Inv4b =  Inv4 * J2d
+          Inv6b =  Inv6 * J2d
+
+          expterm4 = exp(g3 * (Inv4b-1._RKIND)**2._RKIND)
+          psifp4   = g2*(Inv4b - 1._RKIND) * expterm4
+          psif2p4  = g2*(1._RKIND +
+     1               2._RKIND*g3*((Inv4b-2._RKIND)**2._RKIND))*expterm4
+
+          expterm6 = exp(g3 * (Inv6b-1._RKIND)**2._RKIND)
+          psifp6   = g2*(Inv6b - 1._RKIND) * expterm6
+          psif2p6  = g2*(1._RKIND +
+     1               2._RKIND*g3*((Inv6b-2._RKIND)**2._RKIND))*expterm6
+
+!         calculate 2PK stress tensor
+          Sb= Sb + 2._RKIND*rfod4(lm,4)*psifp4*m1tm14
+     1        + 2._RKIND*rfod6(lm,4)*psifp6*m1tm16
+
+!         calculate fictitious elasticity tensor
+          CCb = CCb + (4._RKIND*psif2p4)*rfod4(lm,4)
+     1          * TEN_DYADPROD(m1tm14,m1tm14,nsd)
+     1          + (4._RKIND*psif2p6)*rfod6(lm,4)
+     1          * TEN_DYADPROD(m1tm16,m1tm16,nsd)
+
+        END DO
+
+        CCb = CCb * J4d
+
+        PP  = TEN_IDs(nsd) - (1._RKIND/nd) * TEN_DYADPROD(Ci, C, nsd)
+        CC  = TEN_DDOT(CCb, PP, nsd)
+        CC  = TEN_TRANSPOSE(CC, nsd)
+        CC  = TEN_DDOT(PP, CC, nsd)
+
+        ELSE
+
+        CC = 0._RKIND
+
+        END IF
+
+        r1 = J2d*MAT_DDOT(C, Sb, nsd) / nd
+        S  = J2d*Sb - r1*Ci
+
+        CC  = CC - (2._RKIND/nd) * ( TEN_DYADPROD(Ci, S, nsd) +
+     2        TEN_DYADPROD(S, Ci, nsd) )
+
+        CC  = CC + 2._RKIND*r1 * TEN_SYMMPROD(Ci, Ci, nsd)
+     2        - 2._RKIND*r1/nd * TEN_DYADPROD(Ci, Ci, nsd)
 
       CASE DEFAULT
          err = "Undefined isochoric material constitutive model"
